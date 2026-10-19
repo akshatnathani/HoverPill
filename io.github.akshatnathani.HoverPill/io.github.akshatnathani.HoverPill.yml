@@ -1,0 +1,68 @@
+id: io.github.akshatnathani.HoverPill
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node20
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: hoverpill
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=x11
+  - --device=dri
+  - --share=ipc
+  - --share=network
+  - --filesystem=~/.config/dev.hoverpill.app:rw
+  - --filesystem=~/.local/share/gnome-shell/extensions:rw
+  - --filesystem=~/.config/autostart:rw
+  - --filesystem=~/.claude:rw
+  - --talk-name=org.hoverpill.Notch
+  - --talk-name=org.freedesktop.DBus
+  - --talk-name=org.freedesktop.DBus.Monitoring
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.gnome.SessionManager
+  - --talk-name=org.mpris.MediaPlayer2.*
+  - --system-talk-name=org.freedesktop.Accounts
+  - --own-name=org.hoverpill.*
+modules:
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+  - name: node-deps
+    buildsystem: simple
+    build-options:
+      env:
+        HOME: /run/build/node-deps
+        npm_config_offline: 'true'
+    sources:
+      - type: dir
+        path: .
+      - type: file
+        path: io.github.akshatnathani.HoverPill/node-sources.json
+    build-commands:
+      - cp -r npm_cache /run/build/node-deps/.npm
+      - cd /run/build/node-deps && npm ci --offline --ignore-scripts
+  - name: hoverpill
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/hoverpill/cargo
+        npm_config_offline: 'true'
+      append-path: /usr/lib/sdk/node20/bin:/usr/lib/sdk/rust-stable/bin
+    sources:
+      - type: dir
+        path: ../
+      - type: file
+        path: io.github.akshatnathani.HoverPill/cargo-sources.json
+    build-commands:
+      - cd /app/src
+      - mkdir -p cargo && cp -r cargo-sources.json cargo/ || true
+      - mkdir -p src-tauri/.cargo && echo -e '[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "/run/build/hoverpill/cargo/vendor"' > src-tauri/.cargo/config.toml
+      - npm ci --offline
+      - npx tauri build -- -b deb
+      - ar -x src-tauri/target/release/bundle/deb/hover-pill_*_amd64.deb
+      - tar -xf data.tar.gz -C /app
+      - install -Dm755 /app/usr/bin/hoverpill /app/bin/hoverpill
+      - install -Dm644 /app/usr/share/applications/HoverPill.desktop /app/share/applications/io.github.akshatnathani.HoverPill.desktop
+      - install -Dm644 /app/usr/share/icons/hicolor/128x128/apps/hoverpill.png /app/share/icons/hicolor/128x128/apps/hoverpill.png
+      - install -Dm644 /app/usr/share/icons/hicolor/256x256@2/apps/hoverpill.png /app/share/icons/hicolor/512x512/apps/hoverpill.png
+      - install -Dm644 /app/usr/share/icons/hicolor/32x32/apps/hoverpill.png /app/share/icons/hicolor/32x32/apps/hoverpill.png
