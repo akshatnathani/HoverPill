@@ -128,6 +128,10 @@ The workflow refuses a tag that doesn't match the version in `tauri.conf.json`. 
 
 [CI](.github/workflows/ci.yml) type-checks and builds the interface, then runs clippy with warnings as errors and the tests on Windows **and** Linux, on every push and pull request. Dependabot opens weekly pull requests for npm, Cargo and Actions updates.
 
+### Flathub
+
+The Flatpak manifest and offline sources live in [`io.github.akshatnathani.HoverPill/`](./io.github.akshatnathani.HoverPill/). To submit to [Flathub](https://flathub.org), fork `flathub/flathub` and open a pull request against the `new-pr` branch containing that directory (the `.yml` manifest, `.metainfo.xml`, generated `node-sources.json`/`cargo-sources.json`, and the vendored `libayatana-appindicator` module). See the [Flathub submission docs](https://docs.flathub.org/for-app-authors/submission/) for the latest process.
+
 ## Layout
 
 ```
