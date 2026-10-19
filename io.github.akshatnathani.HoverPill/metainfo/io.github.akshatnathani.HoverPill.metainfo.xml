@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.akshatnathani.HoverPill</id>
+  <launchable type="desktop-id">io.github.akshatnathani.HoverPill.desktop</launchable>
+  <name>HoverPill</name>
+  <developer id="io.github.akshatnathani">
+    <name>Akshat Nathani</name>
+  </developer>
+  <summary>A Dynamic Island-style notch for Windows and Linux</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://github.com/akshatnathani/HoverPill</url>
+  <url type="bugtracker">https://github.com/akshatnathani/HoverPill/issues</url>
+  <url type="vcs-browser">https://github.com/akshatnathani/HoverPill</url>
+  <description>
+    <p>HoverPill is a smart notch that floats at the top edge of your primary monitor. It springs open when you hover over it, when Claude Code needs permission, when a notification arrives, or when media is playing.</p>
+  </description>
+  <branding>
+    <color type="primary" scheme_preference="light">#111111</color>
+    <color type="primary" scheme_preference="dark">#000000</color>
+  </branding>
+  <releases>
+    <release version="0.3.0" date="2026-10-19">
+      <description>
+        <p>Linux support (X11 and native Wayland via GNOME helper), permission suggestions fix, CI and Linux packaging updates.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">moderate</content_attribute>
+  </content_rating>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <categories>
+    <category>Utility</category>
+    <category>Accessories</category>
+  </categories>
+</component>
