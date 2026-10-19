@@ -1,0 +1,23 @@
+pkgbase = hoverpill-bin
+	pkgdesc = A Dynamic Island-style notch for Windows and Linux (prebuilt binary)
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/akshatnathani/HoverPill
+	arch = x86_64
+	depends = glibc
+	depends = gcc-libs
+	depends = dbus
+	depends = glib2
+	depends = gtk3
+	depends = libsoup3
+	depends = webkit2gtk-4.1
+	depends = libayatana-appindicator
+	depends = xdg-utils
+	depends = hicolor-icon-theme
+	optdepends = gnome-shell: GNOME Shell helper for Wayland fullscreen detection and extension state
+	provides = hoverpill
+	conflicts = hoverpill
+	source = hoverpill-0.3.0-amd64.deb::https://github.com/akshatnathani/HoverPill/releases/download/v0.3.0/HoverPill_0.3.0_amd64.deb
+	sha256sums = 2bd78284619614e8bb6143e0f29a7d42b06cc4b4a1b6ae1b0aa36222c74d4c45
+
+pkgname = hoverpill-bin

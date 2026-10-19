@@ -1,0 +1,40 @@
+# Maintainer: Akshat Nathani <akshatnathani@users.noreply.github.com>
+pkgname=hoverpill-bin
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='A Dynamic Island-style notch for Windows and Linux (prebuilt binary)'
+url='https://github.com/akshatnathani/HoverPill'
+arch=('x86_64')
+# Upstream ships no LICENSE file and no license field (GitHub reports none), so
+# there is nothing honest to put in license=(). Add one here when upstream does.
+depends=(
+  'glibc'
+  'gcc-libs'
+  'dbus'
+  'glib2'
+  'gtk3'
+  'libsoup3'
+  'webkit2gtk-4.1'
+  'libayatana-appindicator'
+  'xdg-utils'
+  'hicolor-icon-theme'
+)
+optdepends=(
+  'gnome-shell: GNOME Shell helper for Wayland fullscreen detection and extension state'
+)
+provides=('hoverpill')
+conflicts=('hoverpill')
+# Source is the fork's release; upstream has no Linux artifacts until its PR #1
+# lands, at which point this URL can move to PreetinderSinghBadesha/HoverPill.
+source=(
+  "hoverpill-${pkgver}-amd64.deb::https://github.com/akshatnathani/HoverPill/releases/download/v${pkgver}/HoverPill_${pkgver}_amd64.deb"
+)
+sha256sums=('2bd78284619614e8bb6143e0f29a7d42b06cc4b4a1b6ae1b0aa36222c74d4c45')
+
+package() {
+  cd "$srcdir"
+  # The .deb is an ar archive: debian-binary, control.tar.gz, data.tar.gz.
+  # data.tar.gz holds usr/bin/hoverpill, the desktop entry and the hicolor icons.
+  ar x "hoverpill-${pkgver}-amd64.deb"
+  tar -xf data.tar.gz -C "$pkgdir"
+}

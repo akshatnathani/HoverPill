@@ -22,6 +22,12 @@ chmod +x HoverPill_<version>_amd64.AppImage
 ./HoverPill_<version>_amd64.AppImage
 ```
 
+**Arch (AUR):** `hoverpill-bin` is on the [AUR](https://aur.archlinux.org/packages/hoverpill-bin) (a helper like `yay` or `paru` works too):
+
+```bash
+yay -S hoverpill-bin
+```
+
 On a Wayland session HoverPill runs through XWayland (`GDK_BACKEND=x11`), because a normal Wayland client can't position itself at the top edge or read the pointer. Native Wayland is on the roadmap.
 
 ### Build the installer yourself
