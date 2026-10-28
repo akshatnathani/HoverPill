@@ -12,7 +12,10 @@ import type {
   PastDecision,
   PermissionRequest,
   ReceivedNotification,
+  PrivacyState,
   Screenshot,
+  SystemCard,
+  SystemCardKind,
   Tab,
   UpdateOffer,
 } from "../lib/types";
@@ -23,19 +26,42 @@ import { formatCountdown, formatElapsed, MAX_DURATION, stopwatchElapsed, timerLe
 
 // ---------- closed ----------
 
-export function IdleView() {
-  return <div className="idle" />;
+/**
+ * The camera/microphone dots. Green for the camera and orange for the microphone, like the
+ * indicators on a phone; the open notch says which app has them.
+ */
+export function PrivacyDots({ privacy, className }: { privacy: PrivacyState; className?: string }) {
+  const { camera, microphone } = privacy;
+  if (!camera.active && !microphone.active) return null;
+  const label = [camera.active && "Camera", microphone.active && "Microphone"].filter(Boolean).join(" and ");
+  return (
+    <span className={`privacy-dots${className ? ` ${className}` : ""}`} role="img" aria-label={`${label} in use`}>
+      {camera.active && <span className="privacy-dot is-camera" />}
+      {microphone.active && <span className="privacy-dot is-microphone" />}
+    </span>
+  );
+}
+
+export function IdleView({ privacy }: { privacy: PrivacyState }) {
+  return (
+    <div className="idle">
+      <PrivacyDots privacy={privacy} />
+    </div>
+  );
 }
 
 /**
  * Closed with something playing: the cover on the left, its colour bleeding into the black.
  * A running timer or stopwatch takes the visualizer's place on the right.
  */
-export function MediaCompactView({ media, clock }: { media: MediaState; clock: string | null }) {
+export function MediaCompactView({ media, clock, privacy }: { media: MediaState; clock: string | null; privacy: PrivacyState }) {
   return (
     <div className="compact">
       <Artwork media={media} className="compact-art" />
-      {clock ? <span className="compact-clock">{clock}</span> : <Visualizer playing={media.playing} />}
+      <span className="compact-end">
+        <PrivacyDots privacy={privacy} />
+        {clock ? <span className="compact-clock">{clock}</span> : <Visualizer playing={media.playing} />}
+      </span>
     </div>
   );
 }
@@ -59,11 +85,14 @@ export function BubbleView({ media, clock }: { media: MediaState | null; clock: 
 }
 
 /** Closed, nothing playing, a timer or stopwatch running. */
-export function TimerCompactView({ clock }: { clock: string }) {
+export function TimerCompactView({ clock, privacy }: { clock: string; privacy: PrivacyState }) {
   return (
     <div className="compact">
       <Icon name="timer" className="compact-timer-icon" />
-      <span className="compact-clock">{clock}</span>
+      <span className="compact-end">
+        <PrivacyDots privacy={privacy} />
+        <span className="compact-clock">{clock}</span>
+      </span>
     </div>
   );
 }
@@ -109,6 +138,50 @@ export function UpdateView({ offer, onInstall, onLater }: { offer: UpdateOffer; 
       <button type="button" className="btn btn-solid alarm-button" onClick={onInstall}>
         {offer.mode === "restart" ? "Restart" : "Download"}
       </button>
+    </div>
+  );
+}
+
+// ---------- volume, brightness, battery ----------
+
+const SYSTEM_ICON: Record<SystemCardKind, IconName> = {
+  volume: "volume",
+  brightness: "sun",
+  charging: "battery",
+  "low-battery": "batteryLow",
+};
+
+/**
+ * A volume or brightness level bar, the charger going in, or the battery running low. It takes
+ * the place of the system's own pop-up in the corner of the screen.
+ */
+export function SystemCardView({ card }: { card: SystemCard }) {
+  const icon = card.kind === "volume" && card.muted ? "volumeMuted" : SYSTEM_ICON[card.kind];
+  const title =
+    card.kind === "charging"
+      ? "Charging"
+      : card.kind === "low-battery"
+        ? "Battery low"
+        : card.kind === "brightness"
+          ? "Brightness"
+          : card.muted
+            ? "Muted"
+            : "Volume";
+  const value = card.kind === "low-battery" ? `${card.level}% left` : `${card.level}%`;
+  return (
+    <div className={`card-system is-${card.kind}${card.muted ? " is-muted" : ""}`} role="status">
+      <span className="system-icon" aria-hidden>
+        <Icon name={icon} />
+      </span>
+      <div className="system-body">
+        <div className="system-line">
+          <span className="system-title">{title}</span>
+          <span className="system-value">{value}</span>
+        </div>
+        <div className="system-bar" aria-hidden>
+          <span style={{ width: `${card.muted ? 0 : card.level}%` }} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -200,6 +273,10 @@ export type ExpandedProps = {
   /** Locked open; the lock button shows on the ChatGPT tab, and on every tab while locked. */
   pinned: boolean;
   onPin: (pinned: boolean) => void;
+  /** Who's using the camera or microphone right now. */
+  privacy: PrivacyState;
+  /** A volume/brightness/charging card, shown inline in the top bar while the notch is open. */
+  systemCard: SystemCard | null;
 };
 
 export function ExpandedView(props: ExpandedProps) {
@@ -231,6 +308,8 @@ export function ExpandedView(props: ExpandedProps) {
           })}
         </div>
         <div className="topbar-end">
+          <PrivacyDots privacy={props.privacy} className="topbar-dots" />
+          {props.systemCard && <SystemMeter card={props.systemCard} />}
           <span className="clock">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>
           {(props.tab === "chatgpt" || props.pinned) && (
             <button
@@ -271,7 +350,7 @@ export function ExpandedView(props: ExpandedProps) {
   );
 }
 
-function HomeTab({ media, onMedia, history, now, onTab, calendar }: ExpandedProps & { now: Date }) {
+function HomeTab({ media, onMedia, history, now, onTab, calendar, privacy }: ExpandedProps & { now: Date }) {
   const latest = history[0];
   const next = nextEvent(calendar, now);
   return (
@@ -291,6 +370,7 @@ function HomeTab({ media, onMedia, history, now, onTab, calendar }: ExpandedProp
             Play something in Spotify, a browser or any media app.
           </EmptyState>
         )}
+        {(privacy.camera.active || privacy.microphone.active) && <PrivacyRow privacy={privacy} />}
         {next ? (
           <UpNext event={next} now={now} />
         ) : latest && (
@@ -897,6 +977,51 @@ function Calendar({ today, events }: { today: Date; events: CalendarEvent[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Home, while something is using the camera or microphone: which app, and since when. */
+function PrivacyRow({ privacy }: { privacy: PrivacyState }) {
+  const uses = [
+    { kind: "camera" as const, label: "Camera", access: privacy.camera },
+    { kind: "microphone" as const, label: "Microphone", access: privacy.microphone },
+  ].filter((use) => use.access.active);
+  return (
+    <div className="privacy-row" role="status">
+      {uses.map(({ kind, label, access }) => {
+        const names = [...new Set(access.entries.map((e) => e.app))].join(", ");
+        const started = access.entries[0]?.startedAt;
+        return (
+          <div key={kind} className={`privacy-use is-${kind}`}>
+            <span className={`privacy-dot is-${kind}`} aria-hidden />
+            <span className="privacy-label">{label}</span>
+            <span className="privacy-app">{names}</span>
+            {started && (
+              <span className="privacy-time">
+                since {new Date(started).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The same change as a card, squeezed into the top bar while the notch is open. */
+function SystemMeter({ card }: { card: SystemCard }) {
+  const icon = card.kind === "volume" && card.muted ? "volumeMuted" : SYSTEM_ICON[card.kind];
+  const name =
+    card.kind === "charging" ? "Charging" : card.kind === "low-battery" ? "Battery low" : card.kind === "brightness" ? "Brightness" : "Volume";
+  const text = card.muted ? "Muted" : `${card.level}%`;
+  return (
+    <span className={`topbar-meter is-${card.kind}${card.muted ? " is-muted" : ""}`} role="status" title={`${name} ${text}`}>
+      <Icon name={icon} />
+      <span className="topbar-meter-bar" aria-hidden>
+        <span style={{ width: `${card.muted ? 0 : card.level}%` }} />
+      </span>
+      <span className="topbar-meter-text">{text}</span>
+    </span>
   );
 }
 

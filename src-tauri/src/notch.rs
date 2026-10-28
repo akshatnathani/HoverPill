@@ -555,10 +555,20 @@ pub fn dock_layout(app: AppHandle) -> Result<Layout, String> {
 #[derive(Default)]
 pub struct DragState(Mutex<Option<Drag>>);
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Drag {
     cursor: PhysicalPosition<f64>,
     window: PhysicalPosition<i32>,
+    /// Linux: the window's size and every monitor's work area (x, y, width, height), read once
+    /// when the drag begins. GNOME keeps a window the app moves itself wholly inside a work area
+    /// (it won't go under the top bar or past a screen edge), so the drag loop clamps the window
+    /// the same way and moves the bubble inside it instead (see `follow_cursor`).
+    #[cfg(target_os = "linux")]
+    size: PhysicalSize<u32>,
+    #[cfg(target_os = "linux")]
+    work_areas: Vec<(i32, i32, i32, i32)>,
+    #[cfg(target_os = "linux")]
+    scale: f64,
 }
 
 fn dragging(win: &WebviewWindow) -> bool {
@@ -572,7 +582,24 @@ pub fn begin_drag(app: AppHandle, state: State<DragState>) -> Result<(), String>
     let win = app.get_webview_window(LABEL).ok_or("no pill window")?;
     let cursor = win.cursor_position().map_err(|e| e.to_string())?;
     let window = win.outer_position().map_err(|e| e.to_string())?;
-    *state.0.lock().unwrap() = Some(Drag { cursor, window });
+    #[cfg(target_os = "linux")]
+    let drag = {
+        let work_areas = win
+            .available_monitors()
+            .map_err(|e| e.to_string())?
+            .iter()
+            .map(|m| {
+                let a = m.work_area();
+                (a.position.x, a.position.y, a.size.width as i32, a.size.height as i32)
+            })
+            .collect();
+        let size = win.outer_size().map_err(|e| e.to_string())?;
+        let scale = win.scale_factor().map_err(|e| e.to_string())?;
+        Drag { cursor, window, size, work_areas, scale }
+    };
+    #[cfg(not(target_os = "linux"))]
+    let drag = Drag { cursor, window };
+    *state.0.lock().unwrap() = Some(drag);
     // While it's on the move there's no notch at the top to keep windows clear of.
     appbar::sync(native_handle(&win), None);
     Ok(())
@@ -589,12 +616,53 @@ pub fn end_drag(app: AppHandle) {
 
 /// Keeps the window where it was relative to the pointer when the drag began, so the bubble
 /// stays under it.
-fn follow_cursor(win: &WebviewWindow, drag: Drag) {
-    if let Some(c) = pointer_position(win) {
-        let x = drag.window.x + (c.x - drag.cursor.x).round() as i32;
-        let y = drag.window.y + (c.y - drag.cursor.y).round() as i32;
-        let _ = win.set_position(PhysicalPosition::new(x, y));
-    }
+///
+/// On Linux the window can't always get there: GNOME keeps it inside the work area. So it's
+/// clamped there up front, and however far the pointer has gone past that is sent to the webview
+/// as `pill:drag-offset` (CSS px), which moves the bubble inside the window to stay under the
+/// pointer. `last_offset` is what was sent last, so it's only sent when it changes.
+fn follow_cursor(win: &WebviewWindow, drag: &Drag, last_offset: &mut (i32, i32)) {
+    let Some(c) = pointer_position(win) else { return };
+    let x = drag.window.x + (c.x - drag.cursor.x).round() as i32;
+    let y = drag.window.y + (c.y - drag.cursor.y).round() as i32;
+    #[cfg(target_os = "linux")]
+    let (x, y) = {
+        let (cx, cy) = (x, y);
+        let (x, y) = clamp_to_work_area(&drag.work_areas, (c.x, c.y), (x, y), drag.size);
+        let offset = (cx - x, cy - y);
+        if offset != *last_offset {
+            *last_offset = offset;
+            let _ = win.emit("pill:drag-offset", (offset.0 as f64 / drag.scale, offset.1 as f64 / drag.scale));
+        }
+        (x, y)
+    };
+    #[cfg(not(target_os = "linux"))]
+    let _ = last_offset;
+    let _ = win.set_position(PhysicalPosition::new(x, y));
+}
+
+/// `pos` moved just enough to put a window of `size` wholly inside the work area of the monitor
+/// under `cursor` (or the nearest one), the way GNOME would place it anyway.
+#[cfg(target_os = "linux")]
+fn clamp_to_work_area(
+    areas: &[(i32, i32, i32, i32)],
+    cursor: (f64, f64),
+    pos: (i32, i32),
+    size: PhysicalSize<u32>,
+) -> (i32, i32) {
+    let distance = |&&(ax, ay, aw, ah): &&(i32, i32, i32, i32)| {
+        let dx = (ax as f64 - cursor.0).max(cursor.0 - (ax + aw) as f64).max(0.0);
+        let dy = (ay as f64 - cursor.1).max(cursor.1 - (ay + ah) as f64).max(0.0);
+        dx * dx + dy * dy
+    };
+    let Some(&(ax, ay, aw, ah)) = areas.iter().min_by(|a, b| distance(a).total_cmp(&distance(b))) else {
+        return pos;
+    };
+    let (w, h) = (size.width as i32, size.height as i32);
+    // `within` keeps a window bigger than the area at its top-left.
+    let x = within(pos.0 as f64, ax as f64, (ax + aw - w) as f64) as i32;
+    let y = within(pos.1 as f64, ay as f64, (ay + ah - h) as f64) as i32;
+    (x, y)
 }
 
 /// The pointer's screen position. On Linux this asks the X root directly: `cursor_position()`
@@ -1059,6 +1127,8 @@ pub fn spawn_hit_test_loop(win: WebviewWindow) {
         // Just dropped under the pointer: don't open until the pointer has moved off it.
         let mut wait_for_leave = false;
         let mut was_dragging = false;
+        // How far the bubble has been moved inside the window during this drag (see `follow_cursor`).
+        let mut drag_offset = (0, 0);
         // Linux: when the current drag started, so a stale button reading can't end it
         // immediately (XWayland can lose the pointerup while the window moves under it).
         #[cfg(target_os = "linux")]
@@ -1080,7 +1150,7 @@ pub fn spawn_hit_test_loop(win: WebviewWindow) {
         let mut ticks: u64 = 0;
         loop {
             // Dragging: the window follows the pointer and nothing else happens meanwhile.
-            let drag = *win.state::<DragState>().0.lock().unwrap();
+            let drag = win.state::<DragState>().0.lock().unwrap().clone();
             if let Some(drag) = drag {
                 #[cfg(target_os = "linux")]
                 let started = *drag_since.get_or_insert_with(Instant::now);
@@ -1098,7 +1168,7 @@ pub fn spawn_hit_test_loop(win: WebviewWindow) {
                     drag_region_full = true;
                     set_input_region(&win, Some(Rect { x: 0.0, y: 0.0, width: 100_000.0, height: 100_000.0 }));
                 }
-                follow_cursor(&win, drag);
+                follow_cursor(&win, &drag, &mut drag_offset);
                 #[cfg(not(target_os = "linux"))]
                 if !accepting_input {
                     accepting_input = true;
@@ -1124,6 +1194,7 @@ pub fn spawn_hit_test_loop(win: WebviewWindow) {
             // Dropped (here or by the webview's `end_drag`): it has moved, and it's under the pointer.
             if was_dragging {
                 was_dragging = false;
+                drag_offset = (0, 0);
                 geo = Geometry::read(&win);
                 wait_for_leave = true;
                 // Back to shaping only the notch, and let the next tick re-apply the reported box.
@@ -1416,5 +1487,30 @@ fn reassert_topmost(win: &WebviewWindow) {
 pub fn linux_preflight() {
     if std::env::var_os("WAYLAND_DISPLAY").is_some() && std::env::var_os("GDK_BACKEND").is_none() {
         std::env::set_var("GDK_BACKEND", "x11");
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    // 1920×1200 with GNOME's 29 px top bar, and a second screen to its right.
+    const AREAS: [(i32, i32, i32, i32); 2] = [(0, 29, 1920, 1171), (1920, 0, 2560, 1440)];
+    const SIZE: PhysicalSize<u32> = PhysicalSize { width: 720, height: 340 };
+
+    #[test]
+    fn a_dragged_window_stays_inside_the_work_area() {
+        // Left edge and under the top bar: held at the work area's corner.
+        assert_eq!(clamp_to_work_area(&AREAS, (20.0, 10.0), (-340, -10), SIZE), (0, 29));
+        // Bottom of the first screen.
+        assert_eq!(clamp_to_work_area(&AREAS, (900.0, 1190.0), (540, 1170), SIZE), (540, 860));
+        // Well inside: left alone.
+        assert_eq!(clamp_to_work_area(&AREAS, (900.0, 600.0), (540, 580), SIZE), (540, 580));
+    }
+
+    #[test]
+    fn the_monitor_under_the_pointer_decides() {
+        // Pointer on the second screen: its work area, which has no top bar.
+        assert_eq!(clamp_to_work_area(&AREAS, (2000.0, 5.0), (1640, -15), SIZE), (1920, 0));
     }
 }

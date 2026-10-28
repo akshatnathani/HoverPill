@@ -1,9 +1,9 @@
 //! Google Calendar: read-only access to the user's calendars.
 //!
-//! Signs in with Google's flow for desktop apps (loopback redirect + PKCE). Google requires an
-//! OAuth client of type "Desktop app" from a Google Cloud project; its ID (and the secret Google
-//! issues with it, which for desktop apps isn't actually secret) come from Settings, or are
-//! built in from HOVERPILL_GOOGLE_CLIENT_ID / HOVERPILL_GOOGLE_CLIENT_SECRET at compile time.
+//! Signs in with Google's flow for desktop apps (loopback redirect + PKCE), using HoverPill's own
+//! OAuth client ("Desktop app"). Its ID and the secret Google issues with it (which for desktop
+//! apps isn't actually secret) are built in at compile time from HOVERPILL_GOOGLE_CLIENT_ID /
+//! HOVERPILL_GOOGLE_CLIENT_SECRET; a build without them can't connect Google Calendar.
 //!
 //! Once connected, upcoming events are fetched every few minutes and sent to the notch, which
 //! shows them on Home and drops a reminder card shortly before each one starts.
@@ -85,7 +85,6 @@ impl Google {
             busy: s.busy,
             error: s.error.clone(),
             plan_usage: false,
-            built_in_client: option_env!("HOVERPILL_GOOGLE_CLIENT_ID").is_some_and(|id| !id.is_empty()),
         }
     }
 
@@ -99,15 +98,11 @@ impl Google {
     }
 }
 
-/// The OAuth client to use: Settings first, then whatever was built in.
-fn client(app: &AppHandle) -> Option<(String, String)> {
-    let cal = app.state::<SettingsStore>().get().calendar;
-    let id = Some(cal.client_id.trim().to_string()).filter(|s| !s.is_empty()).or(option_env!("HOVERPILL_GOOGLE_CLIENT_ID").filter(|s| !s.is_empty()).map(str::to_string))?;
-    let secret = Some(cal.client_secret.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .or(option_env!("HOVERPILL_GOOGLE_CLIENT_SECRET").filter(|s| !s.is_empty()).map(str::to_string))
-        .unwrap_or_default();
-    Some((id, secret))
+/// The OAuth client built into this build, if any.
+fn client() -> Option<(String, String)> {
+    let id = option_env!("HOVERPILL_GOOGLE_CLIENT_ID").map(str::trim).filter(|s| !s.is_empty())?;
+    let secret = option_env!("HOVERPILL_GOOGLE_CLIENT_SECRET").map(str::trim).unwrap_or_default();
+    Some((id.to_string(), secret.to_string()))
 }
 
 #[derive(Deserialize)]
@@ -139,8 +134,8 @@ async fn token_request(form: &[(&str, &str)]) -> Result<TokenResponse, (Option<S
 #[tauri::command]
 pub async fn google_connect(app: AppHandle) -> Result<(), String> {
     let google = app.state::<Google>();
-    let Some((client_id, client_secret)) = client(&app) else {
-        let msg = "Add your Google OAuth client ID below first.".to_string();
+    let Some((client_id, client_secret)) = client() else {
+        let msg = "This build of HoverPill can't sign in to Google.".to_string();
         google.set_error(&app, Some(msg.clone()));
         return Err(msg);
     };
@@ -267,7 +262,7 @@ async fn access_token(app: &AppHandle) -> Result<String, String> {
             return Ok(token);
         }
     }
-    let secret = client(app).filter(|(id, _)| *id == creds.client_id).map(|(_, s)| s).unwrap_or_default();
+    let secret = client().filter(|(id, _)| *id == creds.client_id).map(|(_, s)| s).unwrap_or_default();
     let mut form = vec![("grant_type", "refresh_token"), ("refresh_token", creds.refresh_token.as_str()), ("client_id", creds.client_id.as_str())];
     if !secret.is_empty() {
         form.push(("client_secret", secret.as_str()));

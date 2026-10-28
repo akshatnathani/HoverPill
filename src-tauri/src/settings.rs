@@ -17,6 +17,42 @@ pub struct Settings {
     pub calendar: Calendar,
     pub chatgpt: ChatGpt,
     pub updates: Updates,
+    pub privacy: Privacy,
+    pub system: System,
+}
+
+/// The camera/microphone dots in the closed notch.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Privacy {
+    /// A green dot while any app uses the camera.
+    pub camera_indicator: bool,
+    /// An orange dot while any app uses the microphone.
+    pub microphone_indicator: bool,
+}
+
+impl Default for Privacy {
+    fn default() -> Self {
+        Self { camera_indicator: true, microphone_indicator: true }
+    }
+}
+
+/// The volume, brightness and charging cards that replace the system's own pop-up.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct System {
+    /// A level bar (and mute state) when the volume changes.
+    pub show_volume: bool,
+    /// A level bar when the screen brightness changes (laptops).
+    pub show_brightness: bool,
+    /// A card when the charger is plugged in, and a warning when the battery runs low.
+    pub show_battery: bool,
+}
+
+impl Default for System {
+    fn default() -> Self {
+        Self { show_volume: true, show_brightness: true, show_battery: true }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -87,9 +123,6 @@ pub struct Calendar {
     pub enabled: bool,
     /// Minutes before an event starts to drop a reminder; 0 turns reminders off.
     pub reminder_minutes: f64,
-    /// The user's own Google OAuth client ("Desktop app"). Empty uses one built in, if any.
-    pub client_id: String,
-    pub client_secret: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -143,7 +176,7 @@ impl Default for Media {
 
 impl Default for Calendar {
     fn default() -> Self {
-        Self { enabled: true, reminder_minutes: 5.0, client_id: String::new(), client_secret: String::new() }
+        Self { enabled: true, reminder_minutes: 5.0 }
     }
 }
 
@@ -178,8 +211,6 @@ impl Settings {
         self.notifications.blocked_apps = tidy(self.notifications.blocked_apps);
         self.media.ignored_players = tidy(self.media.ignored_players);
         self.calendar.reminder_minutes = clamp(REMINDER_RANGE, self.calendar.reminder_minutes, Calendar::default().reminder_minutes).round();
-        self.calendar.client_id = self.calendar.client_id.trim().to_string();
-        self.calendar.client_secret = self.calendar.client_secret.trim().to_string();
         self.chatgpt.model = self.chatgpt.model.filter(|m| !m.trim().is_empty());
         self.chatgpt.shortcut = self.chatgpt.shortcut.trim().to_string();
         self
@@ -451,6 +482,19 @@ mod tests {
         assert_eq!(s.chatgpt.shortcut, "Ctrl+Alt+G");
         assert_eq!(s.display.shortcut, "Super+Alt+Space");
         assert!(s.updates.auto_check);
+        // Added after 0.4.1: an older file keeps the dots and the level cards on.
+        assert!(s.privacy.camera_indicator && s.privacy.microphone_indicator);
+        assert!(s.system.show_volume && s.system.show_brightness && s.system.show_battery);
+    }
+
+    #[test]
+    fn a_google_client_from_older_settings_is_dropped() {
+        let s: Settings =
+            serde_json::from_str(r#"{ "calendar": { "enabled": false, "clientId": "1-abc.apps.googleusercontent.com", "clientSecret": "x" } }"#)
+                .unwrap();
+        assert!(!s.calendar.enabled);
+        let saved = serde_json::to_string(&s).unwrap();
+        assert!(!saved.contains("clientId") && !saved.contains("clientSecret"));
     }
 
     #[test]

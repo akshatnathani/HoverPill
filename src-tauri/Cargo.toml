@@ -38,13 +38,18 @@ tauri-plugin-updater = "2"
 # libraries, and under Wayland a plain X11 capture shows most windows black.
 xcap = "0.9.8"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Cryptography", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Volume, brightness and battery for the notch cards; the camera/microphone dots read the
+# consent store through the registry.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Ole", "Win32_System_Power", "Win32_System_Variant", "Win32_System_Wmi"] }
+winreg = "0.56"
 
 # GTK/GDK for shaping the X input region under XWayland (see `set_input_region` in notch.rs) and
 # for reaching our own X window to take the keyboard while the user types (`gdkx11::X11Window`),
 # plus libX11 (through x11-dl) to spot a fullscreen app worth hiding behind (see
 # `fullscreen_app_on`).
 [target.'cfg(target_os = "linux")'.dependencies]
-# Signal handling, to exit normally on SIGTERM/SIGINT (see `exit_on_signal` in main.rs).
+# Signal handling, to exit normally on SIGTERM/SIGINT (see `exit_on_signal` in main.rs), and
+# inotify on the camera nodes, to see a camera being opened or closed (see access.rs).
 libc = "0.2"
 gtk = "0.18"
 gdkx11 = "0.18"

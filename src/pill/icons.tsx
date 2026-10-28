@@ -32,6 +32,13 @@ const PATHS = {
   download: "M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14",
   unlock: "M8 11V8a4 4 0 0 1 7.7-1.5M6 11h12v9H6z",
   check: "M5 12.5l4.5 4.5L19 7.5",
+  volume: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16.5 9.5a3.5 3.5 0 0 1 0 5M19 7a7 7 0 0 1 0 10",
+  volumeMuted: "M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16.5 9.5l5 5M21.5 9.5l-5 5",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4",
+  battery: "M3 8h14v8H3zM19 10.5V13M5.5 10.5h6v3h-6z",
+  batteryLow: "M3 8h14v8H3zM19 10.5V13M5.5 10.5h2v3h-2zM9 17h6",
+  camera: "M4 8h3l1.6-2h6.8L17 8h3v10H4zM12 16.5a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Z",
+  mic: "M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3ZM5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6",
 } as const;
 
 export type IconName = keyof typeof PATHS;

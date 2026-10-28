@@ -5,15 +5,18 @@ import {
   claudeHookInstalled,
   getAutostart,
   inTauri,
+  installUpdate,
   listMonitors,
   mediaPlayers,
   notifyingApps,
+  openLink,
+  pendingUpdate,
   recentNotificationApps,
   setAutostart,
   setClaudeHook,
 } from "../lib/bridge";
 import { useEditableSettings } from "../lib/useSettings";
-import { DEFAULT_SETTINGS, IS_LINUX, RANGES, type MonitorInfo, type PlayerInfo, type Settings } from "../lib/types";
+import { DEFAULT_SETTINGS, IS_LINUX, RANGES, type MonitorInfo, type PlayerInfo, type Settings, type UpdateOffer } from "../lib/types";
 import { Row, Section, SelectRow, SliderRow, SwitchRow, ToggleList } from "./controls";
 import { AccountsTab } from "./AccountsTab";
 import mark from "../../assets/brand/hoverpill-icon.svg";
@@ -25,6 +28,7 @@ const TABS = [
   { id: "display", label: "Display", icon: "M3 5h18v11H3zM8 20h8M12 16v4" },
   { id: "notifications", label: "Notifications", icon: "M18 16V11a6 6 0 1 0-12 0v5l-2 2h16l-2-2ZM10 20a2 2 0 0 0 4 0" },
   { id: "media", label: "Media", icon: "M9 18V6l11-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm11-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" },
+  { id: "status", label: "Status", icon: "M3 12h4l2.5-6 4 12L16 12h5" },
   { id: "accounts", label: "Accounts", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -106,6 +110,7 @@ export function SettingsApp() {
             Couldn't save: {error}
           </div>
         )}
+        <UpdateBanner />
         {!settings ? (
           <div className="empty">Loading…</div>
         ) : (
@@ -114,10 +119,52 @@ export function SettingsApp() {
             {tab === "display" && <DisplayTab settings={settings} update={update} />}
             {tab === "notifications" && <NotificationsTab settings={settings} update={update} />}
             {tab === "media" && <MediaTab settings={settings} update={update} />}
+            {tab === "status" && <StatusTab settings={settings} update={update} />}
             {tab === "accounts" && <AccountsTab settings={settings} update={update} />}
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+/**
+ * An update that was found earlier stays on offer here, even after "Later" in the notch put the
+ * card away. On a .deb/.rpm install it points at the release page instead of restarting.
+ */
+function UpdateBanner() {
+  const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    pendingUpdate().then(setOffer, console.error);
+  }, []);
+  if (!offer) return null;
+  const download = offer.mode === "download";
+  const run = () => {
+    if (download) {
+      openLink("https://github.com/PreetinderSinghBadesha/HoverPill/releases/latest");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    installUpdate().catch((e) => {
+      setError(String(e));
+      setBusy(false);
+    });
+  };
+  return (
+    <div className="banner is-update" role="status">
+      <svg className="banner-icon" viewBox="0 0 24 24" aria-hidden>
+        <path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19h14" />
+      </svg>
+      <div className="banner-text">
+        <strong>HoverPill {offer.version} is ready</strong>
+        <span>{error ?? (download ? "Download the new version from the release page." : "Restart HoverPill to use it.")}</span>
+      </div>
+      <button type="button" className="button is-primary" disabled={busy} onClick={run}>
+        {download ? "Download" : busy ? "Restarting…" : "Restart to update"}
+      </button>
     </div>
   );
 }
@@ -466,4 +513,58 @@ function MediaTab({ settings, update }: { settings: Settings; update: Update }) 
 
 function Note({ children }: { children: ReactNode }) {
   return <p className="note">{children}</p>;
+}
+
+/** The dots in the closed notch, and the cards that replace the system's own volume pop-up. */
+function StatusTab({ settings, update }: { settings: Settings; update: Update }) {
+  const p = settings.privacy;
+  const s = settings.system;
+  const setPrivacy = (patch: Partial<Settings["privacy"]>) => update((v) => ({ ...v, privacy: { ...v.privacy, ...patch } }));
+  const setSystem = (patch: Partial<Settings["system"]>) => update((v) => ({ ...v, system: { ...v.system, ...patch } }));
+
+  return (
+    <>
+      <Section title="Camera and microphone">
+        <SwitchRow
+          title="Green dot when the camera is on"
+          description="A dot in the closed notch while any app uses the camera. Open the notch to see which app, and since when."
+          checked={p.cameraIndicator}
+          onChange={(cameraIndicator) => setPrivacy({ cameraIndicator })}
+        />
+        <SwitchRow
+          title="Orange dot when the microphone is on"
+          description="The same for the microphone, in orange."
+          checked={p.microphoneIndicator}
+          onChange={(microphoneIndicator) => setPrivacy({ microphoneIndicator })}
+        />
+      </Section>
+      <Section title="Volume, brightness and battery">
+        <SwitchRow
+          title="Volume changes"
+          description="A level bar, with the mute state, when the volume changes."
+          checked={s.showVolume}
+          onChange={(showVolume) => setSystem({ showVolume })}
+        />
+        <SwitchRow
+          title="Brightness changes"
+          description="A level bar on laptops when the screen brightness changes."
+          checked={s.showBrightness}
+          onChange={(showBrightness) => setSystem({ showBrightness })}
+        />
+        <SwitchRow
+          title="Charging and low battery"
+          description="A short card when the charger goes in, and a warning when the battery drops below 20%."
+          checked={s.showBattery}
+          onChange={(showBattery) => setSystem({ showBattery })}
+        />
+      </Section>
+      {IS_LINUX && (
+        <Note>
+          On Linux the microphone dot follows recording streams in PipeWire (or PulseAudio), and the camera dot follows
+          apps that have the camera open. Volume, brightness and battery come from the sound server, the backlight and
+          the battery.
+        </Note>
+      )}
+    </>
+  );
 }

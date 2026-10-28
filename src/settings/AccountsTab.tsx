@@ -1,12 +1,11 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { chatGptModels, connectChatGpt, connectGoogle, disconnectChatGpt, disconnectGoogle, openChatGptUsage, openLink } from "../lib/bridge";
+import { useEffect, useState, type ReactNode } from "react";
+import { chatGptModels, connectChatGpt, connectGoogle, disconnectChatGpt, disconnectGoogle, openChatGptUsage } from "../lib/bridge";
 import { useAccounts } from "../lib/useAccounts";
 import { RANGES, type AccountStatus, type ModelInfo, type Settings } from "../lib/types";
 import { Row, Section, SelectRow, SliderRow, SwitchRow } from "./controls";
 
 type Update = (change: (s: Settings) => Settings, debounceMs?: number) => void;
 
-const CLOUD_CONSOLE = "https://console.cloud.google.com/apis/credentials";
 const AUTO_MODEL = "__auto__";
 
 /** Keys for the ChatGPT shortcut. Each must parse in Rust (see the test in shortcut.rs). */
@@ -73,13 +72,6 @@ function GoogleSection({ account, settings, update, run }: { account: AccountSta
   const c = settings.calendar;
   const setCalendar = (patch: Partial<Settings["calendar"]>, debounceMs = 0) =>
     update((s) => ({ ...s, calendar: { ...s.calendar, ...patch } }), debounceMs);
-  const hasClient = c.clientId.trim().length > 0;
-  // With a client built in there's nothing to set up: the form only opens on request.
-  const [showClient, setShowClient] = useState(!hasClient && !account.builtInClient);
-  useEffect(() => {
-    if (account.builtInClient && !hasClient) setShowClient(false);
-  }, [account.builtInClient, hasClient]);
-
   return (
     <>
       <Section title="Google Calendar">
@@ -111,70 +103,7 @@ function GoogleSection({ account, settings, update, run }: { account: AccountSta
         />
       </Section>
 
-      <Section title="Google sign-in client">
-        {showClient ? (
-          <>
-            <TextRow
-              title="Client ID"
-              value={c.clientId}
-              placeholder="1234567890-abc.apps.googleusercontent.com"
-              onChange={(clientId) => setCalendar({ clientId }, 400)}
-            />
-            <TextRow title="Client secret" value={c.clientSecret} secret onChange={(clientSecret) => setCalendar({ clientSecret }, 400)} />
-            <div className="row is-text">
-              <div className="row-description">
-                Google asks every app that reads calendars to sign in with its own client. Making one takes a few minutes in{" "}
-                <button type="button" className="link" onClick={() => openLink(CLOUD_CONSOLE)}>
-                  Google Cloud Console
-                </button>
-                :
-                <ol className="steps">
-                  <li>Create a project, then enable the Google Calendar API for it.</li>
-                  <li>Set up the OAuth consent screen as External, and add your Google account as a test user.</li>
-                  <li>Under Credentials, create an OAuth client ID of type Desktop app.</li>
-                  <li>Paste its client ID and client secret here, then choose Connect above.</li>
-                </ol>
-              </div>
-            </div>
-          </>
-        ) : hasClient ? (
-          <Row title="Client" description={<>Using your own client, {c.clientId.slice(0, 18)}…</>}>
-            <button type="button" className="button" onClick={() => setShowClient(true)}>
-              Change
-            </button>
-          </Row>
-        ) : (
-          <Row title="Client" description="Uses HoverPill's own Google sign-in, so there's nothing to set up. Choose Connect above.">
-            <button type="button" className="button" onClick={() => setShowClient(true)}>
-              Use your own
-            </button>
-          </Row>
-        )}
-      </Section>
     </>
-  );
-}
-
-function TextRow({ title, value, placeholder, secret, onChange }: { title: string; value: string; placeholder?: string; secret?: boolean; onChange: (v: string) => void }) {
-  const id = useId();
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <Row title={title} htmlFor={id}>
-      <input
-        id={id}
-        className="text-input"
-        type={secret ? "password" : "text"}
-        value={draft}
-        placeholder={placeholder}
-        spellCheck={false}
-        autoComplete="off"
-        onChange={(e) => {
-          setDraft(e.target.value);
-          onChange(e.target.value);
-        }}
-      />
-    </Row>
   );
 }
 

@@ -1,6 +1,22 @@
 import { useEffect, useReducer, useRef } from "react";
 import { calendarEvents, currentMedia, inTauri, notchTyping, on, pillReady } from "./bridge";
-import type { CalendarEvent, Decision, MediaState, NotificationItem, PastDecision, PermissionRequest, ReceivedNotification, Tab, UpdateOffer, View } from "./types";
+import type {
+  AccessState,
+  CalendarEvent,
+  Decision,
+  MediaState,
+  NotificationItem,
+  PastDecision,
+  PermissionRequest,
+  PrivacyState,
+  ReceivedNotification,
+  SystemCard,
+  SystemCardKind,
+  SystemState,
+  Tab,
+  UpdateOffer,
+  View,
+} from "./types";
 
 const HOVER_LEAVE_MS = 180;
 /** A burst (a busy group chat) shouldn't take minutes to play through: keep the newest few cards. */
@@ -8,6 +24,17 @@ const MAX_QUEUED_NOTIFICATIONS = 4;
 const MAX_HISTORY = 20;
 const MAX_DECISIONS = 8;
 const TAB_KEY = "hoverpill.notch.tab";
+
+/** How long a system card stays up: level bars are a glance, a low battery is worth more. */
+const SYSTEM_CARD_MS: Record<SystemCardKind, number> = {
+  volume: 2000,
+  brightness: 2000,
+  charging: 2500,
+  "low-battery": 6000,
+};
+
+const NO_ACCESS: AccessState = { entries: [], active: false };
+const NO_PRIVACY: PrivacyState = { camera: NO_ACCESS, microphone: NO_ACCESS };
 
 type State = {
   /** The notch is open (pushed to the top edge, or rested on). */
@@ -38,6 +65,12 @@ type State = {
   onCard: boolean;
   /** This opening came from reaching for the update card, so the card stays (see `pickView`). */
   cardHeld: boolean;
+  /** Camera and microphone use right now. */
+  privacy: PrivacyState;
+  /** The latest volume, brightness and battery reading (null until the first arrives). */
+  system: SystemState | null;
+  /** A short card for what just changed, until it's dismissed. */
+  systemCard: SystemCard | null;
 };
 
 type Action =
@@ -57,7 +90,10 @@ type Action =
   | { type: "ask" }
   | { type: "summon" }
   | { type: "pin"; value: boolean }
-  | { type: "update"; value: UpdateOffer | null };
+  | { type: "update"; value: UpdateOffer | null }
+  | { type: "privacy"; value: PrivacyState }
+  | { type: "system"; value: SystemState }
+  | { type: "dismissSystem"; at: number };
 
 function withTab(state: State, tab: Tab): State {
   return { ...state, tab, unseen: tab === "notifications" ? 0 : state.unseen };
@@ -129,7 +165,41 @@ function reducer(state: State, action: Action): State {
       return { ...state, pinned: action.value };
     case "update":
       return { ...state, update: action.value };
+    case "privacy":
+      return { ...state, privacy: action.value };
+    case "system": {
+      const card = changedCard(state.system, action.value);
+      // A newer change replaces whatever card was up; an unchanged reading leaves it alone.
+      return { ...state, system: action.value, systemCard: card ?? state.systemCard };
+    }
+    case "dismissSystem":
+      return state.systemCard?.at === action.at ? { ...state, systemCard: null } : state;
   }
+}
+
+/**
+ * What just changed, for a short card. Plugging in wins over a level bar, and a low battery is
+ * only announced once, when it crosses below 20% while unplugged. The first reading after
+ * starting isn't a change, so nothing drops down for what was already true.
+ */
+function changedCard(before: SystemState | null, after: SystemState): SystemCard | null {
+  if (!before) return null;
+  const at = Date.now();
+  const battery = after.battery;
+  if (battery.supported && !before.battery.charging && battery.charging) {
+    return { kind: "charging", level: battery.level, muted: false, at };
+  }
+  const low = (s: SystemState) => s.battery.supported && !s.battery.charging && s.battery.level < 20;
+  if (!low(before) && low(after)) {
+    return { kind: "low-battery", level: battery.level, muted: false, at };
+  }
+  if (before.volume.level !== after.volume.level || before.volume.muted !== after.volume.muted) {
+    return { kind: "volume", level: after.volume.level, muted: after.volume.muted, at };
+  }
+  if (after.brightness.supported && before.brightness.level !== after.brightness.level) {
+    return { kind: "brightness", level: after.brightness.level, muted: false, at };
+  }
+  return null;
 }
 
 function savedTab(): Tab {
@@ -159,20 +229,29 @@ const initial = (): State => ({
   update: null,
   onCard: false,
   cardHeld: false,
+  privacy: NO_PRIVACY,
+  system: null,
+  systemCard: null,
 });
 
 /**
- * Priority: things waiting on you (a Claude request, then a finished timer or an update), then
- * the open notch, then a notification card, then what's playing, then a running timer or
- * stopwatch.
+ * Priority: things waiting on you (a Claude request, then a finished timer or an update), then a
+ * short system card while closed, then the open notch, then a notification card, then what's
+ * playing, then a running timer or stopwatch.
  */
-export function pickView(s: State, timers: { ringing: boolean; ticking: boolean }): View {
+export function pickView(
+  s: State,
+  timers: { ringing: boolean; ticking: boolean },
+  systemCard: SystemCard | null = s.systemCard,
+): View {
   if (s.permissions.length) return "permission";
   if (timers.ringing) return "alarm";
   // Like the alarm card it has buttons, so it stays while you reach for Restart/Later (the open
   // notch would otherwise replace it). Opened any other way, the notch opens as usual and the
   // card comes back when it closes.
   if (s.update && (!s.open || s.cardHeld)) return "update";
+  // Closed only: when the notch is open the same change shows inline in the top bar instead.
+  if (!s.open && systemCard) return "system";
   if (s.open) return "expanded";
   if (s.queue.length) return "notification";
   if (s.media) return "media";
@@ -203,6 +282,8 @@ export function usePillState(notificationMs: number) {
       on("pill:on-card", (value) => dispatch({ type: "onCard", value })),
       on("pill:fullscreen", (value) => dispatch({ type: "fullscreen", value })),
       on("pill:media", (value) => dispatch({ type: "media", value })),
+      on("pill:privacy", (value) => dispatch({ type: "privacy", value })),
+      on("pill:system", (value) => dispatch({ type: "system", value })),
       on("pill:notification", (value) => dispatch({ type: "notify", value })),
       on("pill:permission", (value) => dispatch({ type: "permission", value })),
       on("pill:permission-cancel", ({ id }) => dispatch({ type: "cancelPermission", id })),
@@ -242,6 +323,14 @@ export function usePillState(notificationMs: number) {
     return () => window.clearTimeout(t);
   }, [head?.id, notificationMs]);
 
+  // A system card is a glance: take it away again, unless a newer one replaced it meanwhile.
+  const systemCard = state.systemCard;
+  useEffect(() => {
+    if (!systemCard) return;
+    const t = window.setTimeout(() => dispatch({ type: "dismissSystem", at: systemCard.at }), SYSTEM_CARD_MS[systemCard.kind]);
+    return () => window.clearTimeout(t);
+  }, [systemCard?.at, systemCard?.kind]);
+
   // Browser-only demo keys, so the UI can be iterated on with `npm run dev`.
   useEffect(() => {
     if (inTauri) return;
@@ -252,11 +341,31 @@ export function usePillState(notificationMs: number) {
       if (e.key === "2") dispatch({ type: "notify", value: { id, app: "Discord", title: "#general", body: "anyone up for a match tonight?" } });
       if (e.key === "3")
         dispatch({ type: "media", value: state.media ? null : { title: "Midnight City", artist: "M83", playing: true, app: "Spotify" } });
+      if (e.key === "4")
+        dispatch({
+          type: "privacy",
+          value: state.privacy.camera.active
+            ? NO_PRIVACY
+            : {
+                camera: { active: true, entries: [{ app: "Google Chrome", id: "chrome.exe", startedAt: Date.now() - 120_000 }] },
+                microphone: { active: true, entries: [{ app: "Zoom", id: "zoom.exe", startedAt: Date.now() - 60_000 }] },
+              },
+        });
+      if (e.key === "5") {
+        const seed = state.system ?? {
+          volume: { level: 45, muted: false },
+          brightness: { level: 80, supported: true },
+          battery: { level: 64, charging: false, supported: true },
+        };
+        // Seed first when there's no reading yet: the first reading never shows a card.
+        if (!state.system) dispatch({ type: "system", value: seed });
+        dispatch({ type: "system", value: { ...seed, volume: { level: (seed.volume.level + 15) % 100, muted: false } } });
+      }
       if (e.key === "o") dispatch({ type: "open", value: !state.open });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.media, state.open]);
+  }, [state.media, state.open, state.privacy, state.system]);
 
   return { state, dispatch, setOpen };
 }

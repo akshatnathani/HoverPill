@@ -409,6 +409,44 @@ body {
   color: var(--danger-text);
 }
 
+/* An update found earlier is still on offer here after "Later" in the notch. */
+.banner.is-update {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.banner-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-text span {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.banner.is-update .button {
+  flex-shrink: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .switch,
   .switch-thumb {
@@ -479,11 +517,3 @@ body {
   color: var(--text);
 }
 
-.steps {
-  margin: 8px 0 0;
-  padding-left: 20px;
-}
-
-.steps li + li {
-  margin-top: 3px;
-}

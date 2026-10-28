@@ -340,7 +340,12 @@ button {
 /* ---------- closed ---------- */
 
 .idle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   height: 100%;
+  padding: 0 14px;
+  box-sizing: border-box;
 }
 
 .compact {
@@ -349,6 +354,12 @@ button {
   justify-content: space-between;
   height: 100%;
   padding: 0 16px 0 9px;
+}
+
+.compact-end {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .notch.has-accent .compact {
@@ -370,6 +381,31 @@ button {
   width: 21px;
   height: 21px;
   border-radius: 6px;
+}
+
+/* ---------- camera/microphone dots ---------- */
+
+.privacy-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.privacy-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.privacy-dot.is-camera {
+  background: #30d158;
+  box-shadow: 0 0 7px rgb(48 209 88 / 0.55);
+}
+
+.privacy-dot.is-microphone {
+  background: #ff9f0a;
+  box-shadow: 0 0 7px rgb(255 159 10 / 0.55);
 }
 
 /* ---------- bubble ---------- */
@@ -506,6 +542,93 @@ button {
   border-radius: 1px;
   background: rgb(var(--accent) / 0.45);
   transform-origin: left center;
+}
+
+/* ---------- volume / brightness / battery card ---------- */
+
+.card-system {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  padding: 0 20px 0 18px;
+  box-sizing: border-box;
+}
+
+.system-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--graphite);
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
+.system-icon .icon {
+  width: 19px;
+  height: 19px;
+}
+
+.system-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.system-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-title {
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.system-value {
+  color: var(--smoke);
+  font-variant-numeric: tabular-nums;
+}
+
+.system-bar {
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: var(--graphite-hi);
+  overflow: hidden;
+}
+
+.system-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 0.18s ease-out;
+}
+
+.card-system.is-muted .system-icon,
+.card-system.is-muted .system-value {
+  color: var(--smoke);
+}
+
+.card-system.is-muted .system-bar span {
+  background: var(--smoke);
+}
+
+.card-system.is-charging .system-bar span {
+  background: var(--good);
+}
+
+.card-system.is-low-battery .system-icon {
+  color: var(--bad);
+}
+
+.card-system.is-low-battery .system-bar span {
+  background: var(--bad);
 }
 
 /* ---------- Claude permission card ---------- */
@@ -705,6 +828,63 @@ button {
   gap: 10px;
 }
 
+.topbar-dots {
+  gap: 4px;
+}
+
+.topbar-meter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--graphite);
+  color: var(--smoke);
+}
+
+.topbar-meter .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.topbar-meter-bar {
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--graphite-hi);
+  overflow: hidden;
+}
+
+.topbar-meter-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 0.18s ease-out;
+}
+
+.topbar-meter-text {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-meter.is-charging .topbar-meter-bar span {
+  background: var(--good);
+}
+
+.topbar-meter.is-low-battery .icon {
+  color: var(--bad);
+}
+
+.topbar-meter.is-low-battery .topbar-meter-bar span {
+  background: var(--bad);
+}
+
+.topbar-meter.is-muted .topbar-meter-bar span {
+  background: var(--smoke);
+}
+
 .clock {
   font-family: var(--display);
   font-size: 14px;
@@ -758,6 +938,44 @@ button {
   flex-direction: column;
   justify-content: space-between;
   min-width: 0;
+}
+
+/* Who has the camera or microphone, while the notch is open. */
+.privacy-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.privacy-use {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--smoke);
+}
+
+.privacy-use .privacy-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.privacy-label {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.privacy-app {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.privacy-time {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .home-player {

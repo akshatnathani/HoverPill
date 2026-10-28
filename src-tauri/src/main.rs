@@ -1,6 +1,7 @@
 // No console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod access;
 mod accounts;
 mod appbar;
 mod autostart;
@@ -13,6 +14,7 @@ mod settings;
 #[cfg(target_os = "linux")]
 mod shellext;
 mod shortcut;
+mod system;
 mod tray;
 mod updater;
 
@@ -53,6 +55,7 @@ fn main() {
         .manage(notch::DragState::default())
         .manage(screen::Screens::default())
         .manage(updater::Pending::default())
+        .manage(updater::Latest::default())
         .manage(events::Outbox::default())
         .invoke_handler(tauri::generate_handler![
             notch::set_hit_rect,
@@ -66,6 +69,7 @@ fn main() {
             tray::claude_hook_installed,
             tray::set_claude_hook,
             updater::check_for_updates,
+            updater::pending_update,
             updater::install_update,
             settings::get_settings,
             settings::open_settings,
@@ -175,6 +179,8 @@ fn main() {
             shortcut::summon_from_args(app.handle(), &args);
             accounts::google::spawn(app.handle().clone());
             updater::spawn(app.handle().clone());
+            access::spawn_worker(app.handle().clone());
+            system::spawn_worker(app.handle().clone());
             #[cfg(target_os = "linux")]
             exit_on_signal(app.handle().clone());
             autostart::refresh(app.handle());

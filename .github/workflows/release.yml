@@ -9,9 +9,8 @@
 # (src-tauri/tauri.release.conf.json turns that on; the matching public key is in
 # tauri.conf.json), and the release gets a latest.json the updater reads.
 #
-# Optional repository secrets HOVERPILL_GOOGLE_CLIENT_ID and HOVERPILL_GOOGLE_CLIENT_SECRET build
-# a Google sign-in client into the app, so people can connect Google Calendar without making
-# their own. Without them, Settings asks for one as before.
+# The repository secrets HOVERPILL_GOOGLE_CLIENT_ID and HOVERPILL_GOOGLE_CLIENT_SECRET build
+# HoverPill's Google sign-in client into the app. Without them, Google Calendar can't connect.
 name: Release
 
 on:
